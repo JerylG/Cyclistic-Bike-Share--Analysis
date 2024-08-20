@@ -1,0 +1,188 @@
+## Installing Libraries
+install.packages("tidyverse")
+install.packages("janitor")
+install.packages("lubridate")
+install.packages("skimr")
+install.packages("ggplot2")
+install.packages("gridExtra")
+install.packages("tibble")
+
+library("tidyverse")
+library("janitor")
+library("lubridate")
+library("dplyr")
+library("readr")
+library("skimr")
+library("ggplot2")
+library("gridExtra")
+library("tibble")
+
+rm(list=ls())
+
+## Creating datasets
+df1  <- read.csv("202105-divvy-tripdata.csv")
+df2  <- read.csv("202106-divvy-tripdata.csv")
+df3  <- read.csv("202107-divvy-tripdata.csv")
+df4  <- read.csv("202108-divvy-tripdata.csv")
+df5  <- read.csv("202109-divvy-tripdata.csv")
+df6  <- read.csv("202110-divvy-tripdata.csv")
+df7  <- read.csv("202111-divvy-tripdata.csv")
+df8  <- read.csv("202112-divvy-tripdata.csv")
+df9  <- read.csv("202201-divvy-tripdata.csv")
+df10 <- read.csv("202202-divvy-tripdata.csv")
+df11 <- read.csv("202203-divvy-tripdata.csv")
+df12 <- read.csv("202204-divvy-tripdata.csv")
+
+## Combine 12 data.frames into One (1) data.frame
+bike_rides <- rbind(df1,df2,df3,df4,df5,df6,df7,df8,df9,df10,df11,df12)
+bike_rides <- janitor::remove_empty(bike_rides,which = c("cols"))
+bike_rides <- janitor::remove_empty(bike_rides,which = c("rows"))
+bike_rides <- bike_rides  %>% filter(start_station_name !="")
+
+## Convert Data/Time stamp to Date/Time ...
+bike_rides$Ymd <- as.Date(bike_rides$started_at)
+bike_rides$started_at <- lubridate::ymd_hms(bike_rides$started_at)
+bike_rides$ended_at <- lubridate::ymd_hms(bike_rides$ended_at)
+
+
+bike_rides$start_hour <- lubridate::hour(bike_rides$started_at)
+bike_rides$end_hour <- lubridate::hour(bike_rides$ended_at)
+
+##Separating the dates into month, day, year and day of week
+bike_rides$Date<- as.Date(bike_rides$started_at)
+bike_rides$month<- format(as.Date(bike_rides$Date),"%m")
+bike_rides$day<- format(as.Date(bike_rides$Date),"%d")
+bike_rides$year<- format(as.Date(bike_rides$Date),"%y")
+bike_rides$day_of_week <- format(as.Date(bike_rides$Date),"%A")
+
+## Finding the trip duration
+bike_rides$Hours <- difftime(bike_rides$ended_at,bike_rides$started_at,units = c("hours"))
+bike_rides$Minutes <- difftime(bike_rides$ended_at,bike_rides$started_at,units = c("mins"))
+bike_rides$seconds<-difftime(bike_rides$ended_at,bike_rides$started_at)
+df <- bike_rides %>% filter(Minutes >0) %>% na.omit()
+
+summary(df$Minutes)
+
+
+mean(df$Minutes)
+median(df$Minutes)
+df$day_of_week <- format(as.Date(df$ymd),"%A")
+
+str(df)
+
+## Comparing members and casuals
+aggregate(df$Minutes~df$member_casual,FUN = mean)
+aggregate(df$Minutes~df$member_casual,FUN = median)
+aggregate(df$Minutes~df$member_casual,FUN = max)
+aggregate(df$Minutes~df$member_casual,FUN = min)
+
+##Measuring the average ride time for each day for Members V/s Casuals
+aggregate(df$Minutes~df$member_casual+df$day_of_week,FUN = mean)
+
+##As the days of the week are out of order, fixing it
+df$day_of_week<-ordered(df$day_of_week,levels=c("Sunday","Monday","Tuesday","Wednesday","Thrusday","Friday","Saturday"))
+mean(df$Minutes)
+
+
+## DATA VISUALIZATION
+##Moving forward with visualization after completing the cleaning and processing of the dataset
+
+##Finding out the total members and casuals from a pie chart
+table(df["member_casual"])
+df %>% 
+  total_users <- c(2532243,3219890)
+  pie(total_users)
+labels <- c("casual","members")
+piepercent <- round(100*total_users/sum(total_users), 1)
+colors <- c("Orange","Blue")
+pie(total_users,labels =  piepercent, main = "Total users", col = colors)
+legend("bottomright",c("casual","members"),cex = 0.8, fill = colors)
+
+##Average duration of rides during the week
+df %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(Minutes)) %>% 
+  arrange(member_casual, weekday)  %>% 
+  ggplot(aes(x = weekday, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge")+
+  labs(title = "Number of rides by user type during the week",x="Days of the week",y="Number of rides",fill="user type")+
+  theme(legend.position = "top")
+
+##Average duration of rides during the year
+df%>%
+  group_by(member_casual, month) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(Minutes)) %>% 
+  arrange(member_casual, month)  %>% 
+  ggplot(aes(x = month, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge")+
+  labs(title = "Number of rides by user type during the year",x="Months of the year",y="Number of rides",fill="user type")+
+  theme(legend.position = "top")
+
+##Average Time for both members and casuals
+userType_mean <- df %>% group_by(member_casual)%>% summarise(mean_time = mean(Hours))
+membervstime<-ggplot(userType_mean)+
+  geom_col(mapping=aes(x=member_casual,y=mean_time,fill=member_casual))+
+  labs(title = "Mean travel time b y user type",x="User Type",y="Mean time in sec")
+grid.arrange(membervstime,ncol=2)
+
+
+##Bike type members and casuals
+with_bike_type<-df %>% filter(rideable_type=="classic_bike" | rideable_type=="electric_bike")
+
+##Bike type usage by user type
+with_bike_type %>%
+  group_by(member_casual,rideable_type)%>%
+  summarise(totals=n(), .groups = "drop")%>%
+  ggplot()+
+  geom_col(aes(x=member_casual,y=totals,fill=rideable_type),position = "dodge") +
+  labs(title = "bike type usage by user type",x="User type",y=NULL,fill="Bike type")+
+  theme_minimal()+
+  theme(legend.position = "top")
+
+##Bike type usage by user type during the week
+with_bike_type %>%
+  mutate(weekday = wday(started_at,label = TRUE))%>%
+  group_by(member_casual,rideable_type,weekday)%>%
+  summarize(totals=n(),groups="drop")%>%
+  
+  ggplot(aes(x=weekday,y=totals,fill=rideable_type))+
+  geom_col(position = "dodge")+
+  facet_wrap(~member_casual)+
+  labs(title = "Bike type usage by user type during a week",x="User type",y=NULL,caption = )+
+  theme_minimal() +
+  theme(legend.position = "top")
+
+
+##Top 10 start stations for members and casuals
+
+##First, analysis to find the top 10 stations 
+num_station <- df %>%
+  group_by(start_station_name) %>%
+  count(member_casual,sort = (decreasing = TRUE))
+
+num_station <- data.frame(num_station)
+
+top_member <- subset(num_station, member_casual == "member") %>%
+  top_n (10)
+
+top_member
+
+top_casual <- subset(num_station, member_casual == "casual") %>%
+  top_n(10)
+top_casual
+
+##Plotting the top 10 start stations for members
+ggplot(data=top_member)+
+  geom_bar(stat="identity",mapping = aes(start_station_name, y=n), fill ="Blue")+
+  theme(axis.text.x= element_text(angle = 90))+
+  labs(title= "Top 10 Start Station for Members")
+
+
+##Plotting the first 10 start stations for casuals
+ggplot(data=top_casual)+
+  geom_bar(stat="identity",mapping = aes(start_station_name, y=n), fill ="Blue")+
+  theme(axis.text.x= element_text(angle = 90))+
+  labs(title= "Top 10 Start Station for Casuals")  
